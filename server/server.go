@@ -92,6 +92,16 @@ func ServerFromContext(ctx context.Context) *MCPServer {
 	return nil
 }
 
+type sessionIDKey struct{}
+
+// SessionIDFromContext retrieves the session ID from a context
+func SessionIDFromContext(ctx context.Context) string {
+	if sessionID, ok := ctx.Value(sessionIDKey{}).(string); ok {
+		return sessionID
+	}
+	return ""
+}
+
 // WithContext sets the current client context and returns the provided context
 func (s *MCPServer) WithContext(
 	ctx context.Context,

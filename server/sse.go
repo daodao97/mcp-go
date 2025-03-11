@@ -238,6 +238,8 @@ func (s *SSEServer) handleMessage(w http.ResponseWriter, r *http.Request) {
 		SessionID: sessionID,
 	})
 
+	ctx = context.WithValue(ctx, sessionIDKey{}, sessionID)
+
 	sessionI, ok := s.sessions.Load(sessionID)
 	if !ok {
 		s.writeJSONRPCError(w, nil, mcp.INVALID_PARAMS, "Invalid session ID")
