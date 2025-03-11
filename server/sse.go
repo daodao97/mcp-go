@@ -19,7 +19,34 @@ type sseSession struct {
 	flusher    http.Flusher
 	done       chan struct{}
 	eventQueue chan string // Channel for queuing events
-	Meta       map[string]string
+	store      *SessionStore
+}
+
+type sessionStoreKey struct{}
+
+type SessionStore struct {
+	lock sync.RWMutex
+	Meta map[string]string
+}
+
+func (s *SessionStore) Get(key string) string {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return s.Meta[key]
+}
+
+func (s *SessionStore) Set(key, value string) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.Meta[key] = value
+}
+
+func SessionStoreFromCtx(ctx context.Context) *SessionStore {
+	session := ctx.Value(sessionStoreKey{})
+	if session == nil {
+		return nil
+	}
+	return session.(*SessionStore)
 }
 
 // SSEServer implements a Server-Sent Events (SSE) based MCP server.
@@ -162,7 +189,7 @@ func (s *SSEServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		flusher:    flusher,
 		done:       make(chan struct{}),
 		eventQueue: make(chan string, 100), // Buffer for events
-		Meta:       meta,
+		store:      &SessionStore{Meta: meta},
 	}
 
 	s.sessions.Store(sessionID, session)
@@ -245,7 +272,7 @@ func (s *SSEServer) handleMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	session := sessionI.(*sseSession)
 
-	ctx = context.WithValue(ctx, sessionStore{}, session.Meta)
+	ctx = context.WithValue(ctx, sessionStoreKey{}, session.store)
 
 	// Parse message as raw JSON
 	var rawMessage json.RawMessage
@@ -342,15 +369,4 @@ func (s *SSEServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.NotFound(w, r)
-}
-
-type sessionStore struct{}
-
-func SessionStoreFromCtx(ctx context.Context) map[string]string {
-	session := ctx.Value(sessionStore{})
-	if session == nil {
-		return nil
-	}
-
-	return session.(*sseSession).Meta
 }
