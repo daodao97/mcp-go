@@ -19,6 +19,7 @@ type sseSession struct {
 	flusher    http.Flusher
 	done       chan struct{}
 	eventQueue chan string // Channel for queuing events
+	Meta       map[string]string
 }
 
 // SSEServer implements a Server-Sent Events (SSE) based MCP server.
@@ -150,11 +151,18 @@ func (s *SSEServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sessionID := uuid.New().String()
+	query := r.URL.Query()
+	meta := make(map[string]string)
+	for key, value := range query {
+		meta[key] = value[0]
+	}
+
 	session := &sseSession{
 		writer:     w,
 		flusher:    flusher,
 		done:       make(chan struct{}),
 		eventQueue: make(chan string, 100), // Buffer for events
+		Meta:       meta,
 	}
 
 	s.sessions.Store(sessionID, session)
@@ -332,4 +340,13 @@ func (s *SSEServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.NotFound(w, r)
+}
+
+func (s *SSEServer) SessionStore(sessionID string) map[string]string {
+	sessionI, ok := s.sessions.Load(sessionID)
+	if !ok {
+		return nil
+	}
+	session := sessionI.(*sseSession)
+	return session.Meta
 }
