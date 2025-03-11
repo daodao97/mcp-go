@@ -238,14 +238,14 @@ func (s *SSEServer) handleMessage(w http.ResponseWriter, r *http.Request) {
 		SessionID: sessionID,
 	})
 
-	ctx = context.WithValue(ctx, sessionIDKey{}, sessionID)
-
 	sessionI, ok := s.sessions.Load(sessionID)
 	if !ok {
 		s.writeJSONRPCError(w, nil, mcp.INVALID_PARAMS, "Invalid session ID")
 		return
 	}
 	session := sessionI.(*sseSession)
+
+	ctx = context.WithValue(ctx, sessionStore{}, session.Meta)
 
 	// Parse message as raw JSON
 	var rawMessage json.RawMessage
@@ -344,11 +344,13 @@ func (s *SSEServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	http.NotFound(w, r)
 }
 
-func (s *SSEServer) SessionStore(sessionID string) map[string]string {
-	sessionI, ok := s.sessions.Load(sessionID)
-	if !ok {
+type sessionStore struct{}
+
+func SessionStoreFromCtx(ctx context.Context) map[string]string {
+	session := ctx.Value(sessionStore{})
+	if session == nil {
 		return nil
 	}
-	session := sessionI.(*sseSession)
-	return session.Meta
+
+	return session.(*sseSession).Meta
 }
