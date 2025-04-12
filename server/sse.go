@@ -25,6 +25,7 @@ type sseSession struct {
 	sessionID           string
 	notificationChannel chan mcp.JSONRPCNotification
 	initialized         atomic.Bool
+	sessionStore        *SessionStore
 }
 
 // SSEContextFunc is a function that takes an existing context and the current
@@ -48,20 +49,24 @@ func (s *sseSession) Initialized() bool {
 	return s.initialized.Load()
 }
 
+func (s *sseSession) SessionStore() *SessionStore {
+	return s.sessionStore
+}
+
 var _ ClientSession = (*sseSession)(nil)
 
 // SSEServer implements a Server-Sent Events (SSE) based MCP server.
 // It provides real-time communication capabilities over HTTP using the SSE protocol.
 type SSEServer struct {
-	server          *MCPServer
-	baseURL         string
-	basePath        string
-  useFullURLForMessageEndpoint bool
-	messageEndpoint string
-	sseEndpoint     string
-	sessions        sync.Map
-	srv             *http.Server
-	contextFunc     SSEContextFunc
+	server                       *MCPServer
+	baseURL                      string
+	basePath                     string
+	useFullURLForMessageEndpoint bool
+	messageEndpoint              string
+	sseEndpoint                  string
+	sessions                     sync.Map
+	srv                          *http.Server
+	contextFunc                  SSEContextFunc
 
 	keepAlive         bool
 	keepAliveInterval time.Duration
@@ -158,12 +163,12 @@ func WithSSEContextFunc(fn SSEContextFunc) SSEOption {
 // NewSSEServer creates a new SSE server instance with the given MCP server and options.
 func NewSSEServer(server *MCPServer, opts ...SSEOption) *SSEServer {
 	s := &SSEServer{
-		server:            server,
-		sseEndpoint:       "/sse",
-		messageEndpoint:   "/message",
-    useFullURLForMessageEndpoint: true,
-		keepAlive:         false,
-		keepAliveInterval: 10 * time.Second,
+		server:                       server,
+		sseEndpoint:                  "/sse",
+		messageEndpoint:              "/message",
+		useFullURLForMessageEndpoint: true,
+		keepAlive:                    false,
+		keepAliveInterval:            10 * time.Second,
 	}
 
 	// Apply all options
@@ -234,6 +239,16 @@ func (s *SSEServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sessionID := uuid.New().String()
+
+	query := r.URL.Query()
+	meta := make(map[string]string)
+	for key, value := range query {
+		meta[key] = value[0]
+	}
+
+	sessionStore := &SessionStore{
+		Meta: meta,
+	}
 	session := &sseSession{
 		writer:              w,
 		flusher:             flusher,
@@ -241,6 +256,7 @@ func (s *SSEServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		eventQueue:          make(chan string, 100), // Buffer for events
 		sessionID:           sessionID,
 		notificationChannel: make(chan mcp.JSONRPCNotification, 100),
+		sessionStore:        sessionStore,
 	}
 
 	s.sessions.Store(sessionID, session)
@@ -292,7 +308,6 @@ func (s *SSEServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 			}
 		}()
 	}
-
 
 	// Send the initial endpoint event
 	fmt.Fprintf(w, "event: endpoint\ndata: %s\r\n\r\n", s.GetMessageEndpointForClient(sessionID))

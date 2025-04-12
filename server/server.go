@@ -60,6 +60,8 @@ type ClientSession interface {
 	NotificationChannel() chan<- mcp.JSONRPCNotification
 	// SessionID is a unique identifier used to track user session.
 	SessionID() string
+	// SessionStore returns the session store for the session.
+	SessionStore() *SessionStore
 }
 
 // clientSessionKey is the context key for storing current client notification channel.

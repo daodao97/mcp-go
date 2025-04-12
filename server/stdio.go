@@ -71,6 +71,10 @@ func (s *stdioSession) Initialized() bool {
 	return s.initialized.Load()
 }
 
+func (s *stdioSession) SessionStore() *SessionStore {
+	return nil
+}
+
 var _ ClientSession = (*stdioSession)(nil)
 
 var stdioSessionInstance = stdioSession{
